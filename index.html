@@ -1,0 +1,1734 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UJIAN INFORMATIKA SMP - Penilaian Sumatif</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome Icons CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- EmailJS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'ujian-informatika-smp';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : null;
+        const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        window.cloudSaveResult = null;
+        window.cloudResultsList = [];
+
+        if (firebaseConfig) {
+            try {
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+
+                // Authenticate before Firestore operations
+                let user;
+                if (authToken) {
+                    const res = await signInWithCustomToken(auth, authToken);
+                    user = res.user;
+                } else {
+                    const res = await signInAnonymously(auth);
+                    user = res.user;
+                }
+
+                if (user) {
+                    // Strict public path
+                    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'exam_results');
+
+                    // Function to push student result to cloud
+                    window.cloudSaveResult = async (record) => {
+                        try {
+                            await addDoc(colRef, {
+                                ...record,
+                                cloudTimestamp: Date.now()
+                            });
+                        } catch (err) {
+                            console.error("Gagal simpan data ke Cloud Database:", err);
+                        }
+                    };
+
+                    // Real-time Cloud Listener for Teacher Dashboard
+                    onSnapshot(colRef, (snapshot) => {
+                        const items = [];
+                        snapshot.forEach(doc => {
+                            items.push({ id: doc.id, ...doc.data() });
+                        });
+                        window.cloudResultsList = items;
+                        
+                        // Automatically re-render table if on Teacher Dashboard
+                        if (typeof window.renderTeacherTable === 'function') {
+                            window.renderTeacherTable();
+                        }
+                        
+                        const syncBadge = document.getElementById('cloudSyncBadge');
+                        if (syncBadge) {
+                            syncBadge.innerHTML = `<i class="fa-solid fa-cloud-check text-emerald-500"></i> Cloud Sync Aktif (${items.length} data)`;
+                        }
+                    }, (err) => {
+                        console.warn("Firestore snapshot error:", err);
+                    });
+                }
+            } catch (e) {
+                console.error("Firebase Sync Initialization Error:", e);
+            }
+        }
+    </script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Print formatting */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            .print-only {
+                display: block !important;
+            }
+            body {
+                background: white !important;
+                color: black !important;
+            }
+            .print-card {
+                box-shadow: none !important;
+                border: 1px solid #ccc !important;
+            }
+        }
+
+        .print-only {
+            display: none;
+        }
+    </style>
+</head>
+<body class="h-full text-slate-800 font-sans flex flex-col bg-slate-100 selection:bg-brand-500 selection:text-white">
+
+    <!-- HEADER NAVBAR -->
+    <header class="bg-gradient-to-r from-brand-900 via-brand-800 to-indigo-900 text-white shadow-lg sticky top-0 z-40 no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-white/10 backdrop-blur rounded-xl flex items-center justify-center text-xl font-bold border border-white/20">
+                    <i class="fa-solid fa-laptop-code text-blue-300"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-base sm:text-lg leading-tight tracking-wide">UJIAN INFORMATIKA SMP</h1>
+                    <p class="text-xs text-blue-200 hidden sm:block">Penilaian Sumatif Mata Pelajaran Informatika</p>
+                </div>
+            </div>
+
+            <!-- Header Controls -->
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <button id="btnFullscreen" onclick="toggleFullscreen()" class="p-2 text-xs sm:text-sm bg-white/10 hover:bg-white/20 rounded-lg transition border border-white/10 flex items-center space-x-1" title="Mode Layar Penuh">
+                    <i class="fa-solid fa-expand"></i>
+                    <span class="hidden md:inline">Layar Penuh</span>
+                </button>
+                
+                <button id="navDashboardBtn" onclick="switchTeacherView()" class="px-3 py-1.5 text-xs sm:text-sm font-semibold bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition shadow-sm flex items-center space-x-1.5">
+                    <i class="fa-solid fa-user-gear"></i>
+                    <span class="hidden sm:inline">Dashboard Guru</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT WRAPPER -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- VIEW 1: LOGIN PESERTA -->
+        <section id="viewLogin" class="max-w-xl mx-auto my-6 sm:my-10 bg-white rounded-2xl shadow-xl border border-slate-200/80 overflow-hidden transition-all">
+            <div class="bg-gradient-to-r from-brand-700 to-indigo-800 p-6 text-white text-center">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-white/10 rounded-2xl mb-3 border border-white/20 shadow-inner">
+                    <i class="fa-solid fa-graduation-cap text-3xl text-yellow-300"></i>
+                </div>
+                <h2 class="text-xl sm:text-2xl font-bold">LOGIN PESERTA UJIAN</h2>
+                <p class="text-xs sm:text-sm text-blue-100 mt-1" id="schoolIdentityText">SMP NEGERI 1 INDONESIA - T.A. 2025/2026</p>
+            </div>
+
+            <form id="formLogin" onsubmit="handleLogin(event)" class="p-6 sm:p-8 space-y-4">
+                <!-- Lock Notice -->
+                <div id="alreadySubmittedAlert" class="hidden p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs sm:text-sm flex items-start space-x-2">
+                    <i class="fa-solid fa-circle-exclamation text-amber-600 text-base mt-0.5"></i>
+                    <div>
+                        <strong>Peringatan!</strong> Anda telah menyelesaikan ujian pada sesi ini. Hubungi pengawas ujian jika ingin mengulang.
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Nama Lengkap <span class="text-rose-500">*</span></label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fa-solid fa-user"></i></span>
+                        <input type="text" id="loginName" required placeholder="Contoh: Ahmad Rizky" class="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">NIS / NISN <span class="text-rose-500">*</span></label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fa-solid fa-id-card"></i></span>
+                            <input type="text" id="loginNis" required placeholder="Contoh: 12345678" class="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Kelas <span class="text-rose-500">*</span></label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fa-solid fa-door-open"></i></span>
+                            <select id="loginClass" required class="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition bg-white">
+                                <option value="" disabled selected>Pilih Kelas</option>
+                                <option value="VII A">VII A</option>
+                                <option value="VII B">VII B</option>
+                                <option value="VIII A">VIII A</option>
+                                <option value="VIII B">VIII B</option>
+                                <option value="IX A">IX A</option>
+                                <option value="IX B">IX B</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Nomor Peserta <span class="text-rose-500">*</span></label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fa-solid fa-hashtag"></i></span>
+                            <input type="text" id="loginNum" required placeholder="01-001" class="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Token Ujian <span class="text-rose-500">*</span></label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><i class="fa-solid fa-key"></i></span>
+                            <input type="text" id="loginToken" required placeholder="Token" class="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition uppercase tracking-widest font-mono">
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-1">Default Token: <span class="font-mono font-bold text-brand-600">INFO2026</span></p>
+                    </div>
+                </div>
+
+                <button type="submit" id="btnLoginSubmit" class="w-full py-3 px-6 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition transform active:scale-[0.98] flex items-center justify-center space-x-2 text-base">
+                    <span>MULAI UJIAN</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+        </section>
+
+        <!-- VIEW 2: HALAMAN UJIAN -->
+        <section id="viewExam" class="hidden space-y-6">
+            <!-- Exam Info Header & Timer Bar -->
+            <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <!-- Identity -->
+                <div class="flex items-center space-x-4">
+                    <div class="w-12 h-12 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 font-bold text-lg">
+                        <i class="fa-solid fa-user-graduate"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm sm:text-base" id="examStudentName">Nama Siswa</h3>
+                        <p class="text-xs text-slate-500">
+                            NIS: <span id="examStudentNis" class="font-semibold text-slate-700">-</span> | 
+                            Kelas: <span id="examStudentClass" class="font-semibold text-slate-700">-</span> | 
+                            No: <span id="examStudentNum" class="font-semibold text-slate-700">-</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Timer & Progress -->
+                <div class="flex items-center justify-between md:justify-end space-x-4 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
+                    <div class="text-left md:text-right">
+                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sisa Waktu</p>
+                        <div id="timerDisplay" class="font-mono text-xl sm:text-2xl font-extrabold text-slate-800 flex items-center space-x-1.5">
+                            <i class="fa-regular fa-clock text-brand-600 text-lg animate-pulse"></i>
+                            <span id="timerText">00:00:00</span>
+                        </div>
+                    </div>
+
+                    <button onclick="confirmSubmitExam()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center space-x-1.5">
+                        <i class="fa-solid fa-paper-plane"></i>
+                        <span>KUMPULKAN UJIAN</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-3">
+                <div class="text-xs font-semibold text-slate-600 min-w-[100px]">
+                    Progres: <span id="progressText" class="text-brand-600 font-bold">0 / 30</span>
+                </div>
+                <div class="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                    <div id="progressBar" class="bg-brand-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Main Exam Layout Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Question Box (8 cols) -->
+                <div class="lg:col-span-8 bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between min-h-[420px]">
+                    <div>
+                        <!-- Header Soal -->
+                        <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
+                            <div class="flex items-center space-x-2">
+                                <span class="bg-brand-100 text-brand-700 font-bold px-3 py-1 rounded-lg text-xs sm:text-sm">
+                                    Soal No. <span id="qNumber">1</span>
+                                </span>
+                                <span id="qCategory" class="bg-slate-100 text-slate-600 font-semibold px-2.5 py-1 rounded-lg text-xs">
+                                    Berpikir Komputasional
+                                </span>
+                            </div>
+                            <span id="qTypeBadge" class="text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md">
+                                Pilihan Ganda
+                            </span>
+                        </div>
+
+                        <!-- Pertanyaan -->
+                        <div id="qText" class="text-sm sm:text-base font-medium text-slate-800 leading-relaxed mb-6">
+                            Memuat soal...
+                        </div>
+
+                        <!-- Options Container -->
+                        <div id="qOptions" class="space-y-3">
+                            <!-- Options will be rendered dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Bottom Nav Actions -->
+                    <div class="pt-6 mt-6 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                        <button id="btnPrev" onclick="navigateQuestion(-1)" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs sm:text-sm rounded-xl transition flex items-center space-x-2">
+                            <i class="fa-solid fa-chevron-left"></i>
+                            <span>Sebelumnya</span>
+                        </button>
+
+                        <button id="btnFlag" onclick="toggleFlag()" class="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-semibold text-xs sm:text-sm rounded-xl transition flex items-center space-x-2">
+                            <i id="flagIcon" class="fa-regular fa-bookmark"></i>
+                            <span id="flagText">Ragu-ragu</span>
+                        </button>
+
+                        <button id="btnNext" onclick="navigateQuestion(1)" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl transition flex items-center space-x-2">
+                            <span>Berikutnya</span>
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Nav Grid Box (4 cols) -->
+                <div class="lg:col-span-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                    <h4 class="font-bold text-sm text-slate-800 flex items-center justify-between">
+                        <span>Navigasi Soal</span>
+                        <i class="fa-solid fa-border-all text-slate-400"></i>
+                    </h4>
+
+                    <!-- Legend -->
+                    <div class="grid grid-cols-3 gap-2 text-[11px] font-medium text-slate-600 pb-3 border-b border-slate-100">
+                        <div class="flex items-center space-x-1.5">
+                            <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                            <span>Dijawab</span>
+                        </div>
+                        <div class="flex items-center space-x-1.5">
+                            <span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
+                            <span>Ragu-ragu</span>
+                        </div>
+                        <div class="flex items-center space-x-1.5">
+                            <span class="w-3 h-3 rounded-full bg-slate-200 inline-block"></span>
+                            <span>Belum</span>
+                        </div>
+                    </div>
+
+                    <!-- Question Numbers Grid -->
+                    <div id="qGrid" class="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-2 max-h-[300px] overflow-y-auto p-1">
+                        <!-- Number buttons generated here -->
+                    </div>
+
+                    <div class="pt-2">
+                        <button onclick="confirmSubmitExam()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow transition flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-check-circle"></i>
+                            <span>Selesai & Kumpulkan Ujian</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW 3: HALAMAN HASIL UJIAN -->
+        <section id="viewResult" class="hidden max-w-3xl mx-auto my-6 space-y-6">
+            <div id="printableResult" class="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-8 space-y-6 print-card">
+                <!-- Result Header -->
+                <div class="text-center pb-6 border-b border-slate-200">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 text-3xl mb-3">
+                        <i class="fa-solid fa-award"></i>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-slate-800">HASIL PENILAIAN UJIAN</h2>
+                    <p class="text-xs sm:text-sm text-slate-500 mt-0.5">Penilaian Sumatif Mata Pelajaran Informatika SMP</p>
+                </div>
+
+                <!-- Student Metadata Table -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl text-xs sm:text-sm border border-slate-200/80">
+                    <div>
+                        <p class="text-slate-400 font-medium">Nama Peserta</p>
+                        <p id="resStudentName" class="font-bold text-slate-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-slate-400 font-medium">NIS / NISN</p>
+                        <p id="resStudentNis" class="font-bold text-slate-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-slate-400 font-medium">Kelas</p>
+                        <p id="resStudentClass" class="font-bold text-slate-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-slate-400 font-medium">Nomor Peserta</p>
+                        <p id="resStudentNum" class="font-bold text-slate-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-slate-400 font-medium">Tanggal Ujian</p>
+                        <p id="resExamDate" class="font-bold text-slate-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-slate-400 font-medium">Mata Pelajaran</p>
+                        <p class="font-bold text-slate-800">Informatika</p>
+                    </div>
+                </div>
+
+                <!-- Score Summary Cards -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                    <div class="bg-brand-50 border border-brand-100 p-3.5 rounded-xl">
+                        <p class="text-[11px] font-bold text-brand-600 uppercase">Nilai Akhir</p>
+                        <p id="resFinalScore" class="text-2xl sm:text-3xl font-black text-brand-700 mt-1">0</p>
+                    </div>
+                    <div class="bg-emerald-50 border border-emerald-100 p-3.5 rounded-xl">
+                        <p class="text-[11px] font-bold text-emerald-600 uppercase">Benar</p>
+                        <p id="resCorrect" class="text-2xl sm:text-3xl font-black text-emerald-700 mt-1">0</p>
+                    </div>
+                    <div class="bg-rose-50 border border-rose-100 p-3.5 rounded-xl">
+                        <p class="text-[11px] font-bold text-rose-600 uppercase">Salah</p>
+                        <p id="resWrong" class="text-2xl sm:text-3xl font-black text-rose-700 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-100 border border-slate-200 p-3.5 rounded-xl">
+                        <p class="text-[11px] font-bold text-slate-500 uppercase">Kosong</p>
+                        <p id="resEmpty" class="text-2xl sm:text-3xl font-black text-slate-700 mt-1">0</p>
+                    </div>
+                </div>
+
+                <!-- Predicate Badge -->
+                <div class="text-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <p class="text-xs text-slate-500 mb-1">Predikat / Keterangan Capaian</p>
+                    <span id="resPredicateBadge" class="inline-block px-4 py-1.5 text-sm sm:text-base font-extrabold rounded-full bg-brand-600 text-white">
+                        Sangat Baik
+                    </span>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-wrap items-center justify-center gap-3 no-print">
+                <button onclick="window.print()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs sm:text-sm rounded-xl transition flex items-center space-x-2">
+                    <i class="fa-solid fa-print"></i>
+                    <span>Cetak Hasil / Simpan PDF</span>
+                </button>
+                
+                <button id="btnSendEmail" onclick="sendEmailResult()" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl transition flex items-center space-x-2 shadow">
+                    <i class="fa-solid fa-envelope"></i>
+                    <span>Kirim ke Email Guru</span>
+                </button>
+
+                <button onclick="restartToHome()" class="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs sm:text-sm rounded-xl transition flex items-center space-x-2">
+                    <i class="fa-solid fa-house"></i>
+                    <span>Kembali ke Beranda</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- VIEW 4: DASHBOARD GURU -->
+        <section id="viewTeacher" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-800 flex items-center space-x-2">
+                        <i class="fa-solid fa-chart-line text-brand-600"></i>
+                        <span>DASHBOARD REKAPITULASI UJIAN GURU</span>
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-2">
+                        <span>Kelola data hasil ujian siswa, konfigurasi email, dan ekspor laporan.</span>
+                        <span id="cloudSyncBadge" class="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] bg-slate-100 text-slate-700 font-semibold border border-slate-200">
+                            <i class="fa-solid fa-database text-brand-500"></i> Mode Penyimpanan Lokal & Cloud
+                        </span>
+                    </p>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button onclick="exportToCSV()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow transition flex items-center space-x-1.5">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>Ekspor CSV</span>
+                    </button>
+
+                    <button onclick="switchStudentView()" class="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs rounded-xl transition flex items-center space-x-1.5">
+                        <i class="fa-solid fa-arrow-left"></i>
+                        <span>Kembali ke Ujian</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Configuration Info Accordion -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between cursor-pointer" onclick="toggleConfigPanel()">
+                    <span class="font-bold text-xs sm:text-sm text-slate-700 flex items-center space-x-2">
+                        <i class="fa-solid fa-gear text-brand-600"></i>
+                        <span>Status Konfigurasi Mail Server (Guru)</span>
+                    </span>
+                    <i id="configChevron" class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
+                </div>
+                <div id="configPanelContent" class="p-5 text-xs sm:text-sm space-y-3 bg-white">
+                    <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                        <h4 class="font-bold text-slate-800"><i class="fa-solid fa-paper-plane"></i> Menghubungkan Fitur Kirim Hasil ke Email (EmailJS)</h4>
+                        <p class="text-slate-600">Email penerima aktif saat ini diatur ke: <strong class="text-brand-600">slametpriadi10@gmail.com</strong></p>
+                        <ol class="list-decimal pl-5 space-y-1 text-slate-600">
+                            <li>Daftar akun gratis di <a href="https://www.emailjs.com/" target="_blank" class="text-blue-600 underline font-semibold">EmailJS.com</a>.</li>
+                            <li>Buat <strong>Email Service</strong> (misalnya terhubung ke Gmail guru: slametpriadi10@gmail.com).</li>
+                            <li>Buat <strong>Email Template</strong> dengan variabel <code>{{student_name}}</code>, <code>{{score}}</code>, <code>{{class_name}}</code>.</li>
+                            <li>Salin <strong>Service ID</strong>, <strong>Template ID</strong>, dan <strong>Public Key</strong> Anda ke dalam script.</li>
+                        </ol>
+                        <pre class="bg-slate-900 text-blue-300 p-3 rounded-lg overflow-x-auto text-[11px] font-mono">
+const EMAIL_CONFIG = {
+    serviceID: "ISI_SERVICE_ID_ANDA",
+    templateID: "ISI_TEMPLATE_ID_ANDA",
+    publicKey: "ISI_PUBLIC_KEY_ANDA",
+    teacherEmail: "slametpriadi10@gmail.com",
+    enabled: true
+};</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter & Search Controls -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input type="text" id="teacherSearch" oninput="renderTeacherTable()" placeholder="Cari nama atau NIS..." class="px-3.5 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-brand-500">
+                <select id="teacherFilterClass" onchange="renderTeacherTable()" class="px-3.5 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-brand-500 bg-white">
+                    <option value="">Semua Kelas</option>
+                    <option value="VII A">VII A</option>
+                    <option value="VII B">VII B</option>
+                    <option value="VIII A">VIII A</option>
+                    <option value="VIII B">VIII B</option>
+                    <option value="IX A">IX A</option>
+                    <option value="IX B">IX B</option>
+                </select>
+                <select id="teacherSort" onchange="renderTeacherTable()" class="px-3.5 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-brand-500 bg-white">
+                    <option value="newest">Waktu Terbaru</option>
+                    <option value="highest">Nilai Tertinggi</option>
+                    <option value="lowest">Nilai Terendah</option>
+                </select>
+            </div>
+
+            <!-- Table Results -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                            <tr>
+                                <th class="p-3.5">#</th>
+                                <th class="p-3.5">Nama Siswa</th>
+                                <th class="p-3.5">NIS</th>
+                                <th class="p-3.5">Kelas</th>
+                                <th class="p-3.5 text-center">Nilai</th>
+                                <th class="p-3.5 text-center">Predikat</th>
+                                <th class="p-3.5 text-center">Waktu</th>
+                                <th class="p-3.5 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teacherTableBody" class="divide-y divide-slate-100">
+                            <!-- Rows generated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 no-print">
+        <p>&copy; 2026 Ujian Informatika SMP. Seluruh Hak Cipta Dilindungi Undang-Undang.</p>
+    </footer>
+
+    <!-- CUSTOM CONFIRM MODAL -->
+    <div id="modalConfirm" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-100 transform transition-all">
+            <div class="flex items-center space-x-3 text-amber-600">
+                <div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <h3 class="font-bold text-lg text-slate-800" id="modalTitle">Konfirmasi Ujian</h3>
+            </div>
+            <p id="modalMessage" class="text-sm text-slate-600 leading-relaxed">
+                Apakah Anda yakin ingin mengumpulkan ujian? Setelah dikumpulkan, jawaban tidak dapat diubah kembali.
+            </p>
+            <div class="flex items-center justify-end space-x-3 pt-2">
+                <button id="modalBtnCancel" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-semibold rounded-xl transition">
+                    Batal
+                </button>
+                <button id="modalBtnConfirm" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow transition">
+                    Ya, Kumpulkan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CUSTOM NOTICE MODAL -->
+    <div id="modalNotice" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-100">
+            <div class="flex items-center space-x-3">
+                <div id="noticeIconBox" class="w-10 h-10 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-circle-info"></i>
+                </div>
+                <h3 id="noticeTitle" class="font-bold text-lg text-slate-800">Pemberitahuan</h3>
+            </div>
+            <p id="noticeMessage" class="text-sm text-slate-600 leading-relaxed">Pesan pemberitahuan...</p>
+            <div class="flex justify-end pt-2">
+                <button onclick="closeNoticeModal()" class="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition">
+                    Mengerti
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // ==========================================
+        // 1. KONFIGURASI UTAMA UJIAN
+        // ==========================================
+        const EXAM_CONFIG = {
+            schoolName: "SMP NEGERI 1 INDONESIA",
+            academicYear: "2025/2026",
+            examToken: "INFO2026",
+            durationMinutes: 90,
+        };
+
+        const EMAIL_CONFIG = {
+            serviceID: "YOUR_SERVICE_ID",
+            templateID: "YOUR_TEMPLATE_ID",
+            publicKey: "YOUR_PUBLIC_KEY",
+            teacherEmail: "slametpriadi10@gmail.com",
+            enabled: true
+        };
+
+        // ==========================================
+        // 2. BANK SOAL INFORMATIKA SMP (30 SOAL LENGKAP)
+        // ==========================================
+        const BANK_SOAL = [
+            // BERPIKIR KOMPUTASIONAL (1-5)
+            {
+                id: 1,
+                type: "pg",
+                category: "Berpikir Komputasional",
+                question: "Proses memecahkan masalah kompleks menjadi bagian-bagian yang lebih kecil dan lebih mudah dikelola disebut...",
+                options: ["Abstraksi", "Dekomposisi", "Pengenalan Pola", "Algoritma"],
+                answer: 1,
+                discussion: "Dekomposisi adalah teknik memecah masalah besar menjadi sub-masalah kecil agar lebih gampang diselesaikan.",
+                weight: 1
+            },
+            {
+                id: 2,
+                type: "pg",
+                category: "Berpikir Komputasional",
+                question: "Mencari kesamaan atau kemiripan karakteristik di antara beberapa permasalahan dinamakan...",
+                options: ["Pengenalan Pola", "Dekomposisi", "Abstraksi", "Sintesis"],
+                answer: 0,
+                discussion: "Pengenalan pola (Pattern Recognition) digunakan untuk menemukan pola atau tren dari masalah sejenis.",
+                weight: 1
+            },
+            {
+                id: 3,
+                type: "pg",
+                category: "Berpikir Komputasional",
+                question: "Proses mengeliminasi bagian atau informasi yang tidak relevan dan berfokus pada informasi penting saja disebut...",
+                options: ["Reduksi", "Abstraksi", "Algoritma", "Modulasi"],
+                answer: 1,
+                discussion: "Abstraksi menyaring detail yang tidak penting sehingga kita fokus pada esensi utama masalah.",
+                weight: 1
+            },
+            {
+                id: 4,
+                type: "pg",
+                category: "Berpikir Komputasional",
+                question: "Urutan langkah-langkah logis dan terstruktur yang disusun secara sistematis untuk menyelesaikan suatu masalah disebut...",
+                options: ["Struktur Data", "Algoritma", "Program", "Variabel"],
+                answer: 1,
+                discussion: "Algoritma merupakan petunjuk logis step-by-step untuk menyelesaikan tugas atau masalah.",
+                weight: 1
+            },
+            {
+                id: 5,
+                type: "pg_kompleks",
+                category: "Berpikir Komputasional",
+                question: "Pilihlah DUA prinsip utama dari Berpikir Komputasional di bawah ini:",
+                options: ["Dekomposisi", "Membeli perangkat mahal", "Pengenalan Pola", "Merusak program"],
+                answer: [0, 2],
+                discussion: "4 Pilar Berpikir Komputasional: Dekomposisi, Pengenalan Pola, Abstraksi, dan Algoritma.",
+                weight: 1
+            },
+
+            // STRUKTUR DATA & ALGORITMA (6-10)
+            {
+                id: 6,
+                type: "pg",
+                category: "Struktur Data",
+                question: "Struktur data yang menerapkan prinsip LIFO (Last In First Out) di mana data yang terakhir masuk akan pertama kali keluar adalah...",
+                options: ["Queue (Antrean)", "Stack (Tumpukan)", "Tree (Pohon)", "Graph (Graf)"],
+                answer: 1,
+                discussion: "Stack menggunakan konsep LIFO seperti tumpukan piring.",
+                weight: 1
+            },
+            {
+                id: 7,
+                type: "pg",
+                category: "Struktur Data",
+                question: "Struktur data antrean yang menggunakan konsep FIFO (First In First Out) contohnya terjadi pada...",
+                options: ["Tumpukan buku di meja", "Antrean pembeli di kasir", "Navigasi tombol Back di browser", "Undo ketikan di Word"],
+                answer: 1,
+                discussion: "FIFO (First In First Out) melayani yang datang paling pertama, persis antrean kasir.",
+                weight: 1
+            },
+            {
+                id: 8,
+                type: "bs",
+                category: "Struktur Data",
+                question: "Struktur data Tree (Pohon) memiliki komponen induk yang dinamakan 'Root' (Akar).",
+                options: ["Benar", "Salah"],
+                answer: 0,
+                discussion: "Benar, node paling atas pada struktur data hirarki Tree dinamakan Root.",
+                weight: 1
+            },
+            {
+                id: 9,
+                type: "pg",
+                category: "Algoritma",
+                question: "Simbol flowchart berbentuk jajar genjang digunakan untuk menunjukkan proses...",
+                options: ["Start / End (Terminator)", "Proses Perhitungan", "Input / Output", "Keputusan (Decision)"],
+                answer: 2,
+                discussion: "Jajar genjang merepresentasikan perintah masukan (Input) atau keluaran (Output).",
+                weight: 1
+            },
+            {
+                id: 10,
+                type: "pg",
+                category: "Algoritma",
+                question: "Simbol flowchart berbentuk belah ketupat berfungsi untuk...",
+                options: ["Memulai algoritma", "Pengambilan keputusan (Decision)", "Menampilkan output", "Menghubungkan antar halaman"],
+                answer: 1,
+                discussion: "Belah ketupat mewakili kondisi/percabangan logika (Ya/Tidak).",
+                weight: 1
+            },
+
+            // SISTEM KOMPUTER (11-15)
+            {
+                id: 11,
+                type: "pg",
+                category: "Sistem Komputer",
+                question: "Di bawah ini yang tergolong perangkat keras masukan (Input Device) adalah...",
+                options: ["Monitor & Printer", "Keyboard & Mouse", "CPU & RAM", "Speaker & Proyektor"],
+                answer: 1,
+                discussion: "Keyboard dan Mouse berfungsi memasukkan instruksi/data ke dalam komputer.",
+                weight: 1
+            },
+            {
+                id: 12,
+                type: "pg",
+                category: "Sistem Komputer",
+                question: "Komponen utama CPU yang berfungsi melakukan perhitungan aritmatika dan logika matematika dinamakan...",
+                options: ["Control Unit (CU)", "Arithmetic Logic Unit (ALU)", "Register", "Harddisk"],
+                answer: 1,
+                discussion: "ALU bertugas mengeksekusi operasi matematika dan operasi logika.",
+                weight: 1
+            },
+            {
+                id: 13,
+                type: "pg",
+                category: "Sistem Komputer",
+                question: "Memori komputer yang bersifat volatile (data hilang ketika listrik mati) adalah...",
+                options: ["ROM", "Harddisk", "RAM", "Flashdisk"],
+                answer: 2,
+                discussion: "RAM (Random Access Memory) bersifat sementara / volatile.",
+                weight: 1
+            },
+            {
+                id: 14,
+                type: "pg",
+                category: "Sistem Komputer",
+                question: "Sistem operasi berikut ini yang bersifat Open Source (sumber terbuka) adalah...",
+                options: ["Microsoft Windows", "macOS", "Linux", "iOS"],
+                answer: 2,
+                discussion: "Linux merupakan sistem operasi bersifat open-source dan bebas dimodifikasi.",
+                weight: 1
+            },
+            {
+                id: 15,
+                type: "isian",
+                category: "Sistem Komputer",
+                question: "Komponen sistem komputer berupa pengguna atau manusia yang mengoperasikan komputer disebut...",
+                answer: "brainware",
+                discussion: "Sistem komputer terdiri dari Hardware, Software, dan Brainware (manusia).",
+                weight: 1
+            },
+
+            // JARINGAN KOMPUTER & INTERNET (16-20)
+            {
+                id: 16,
+                type: "pg",
+                category: "Jaringan Komputer",
+                question: "Jaringan komputer yang mencakup area terbatas seperti dalam satu ruangan atau gedung dinamakan...",
+                options: ["LAN (Local Area Network)", "MAN (Metropolitan Area Network)", "WAN (Wide Area Network)", "PAN (Personal Area Network)"],
+                answer: 0,
+                discussion: "LAN mencakup cakupan area lokal seperti lab sekolah atau ruangan rumah.",
+                weight: 1
+            },
+            {
+                id: 17,
+                type: "pg",
+                category: "Jaringan Komputer",
+                question: "Protokol standar yang digunakan untuk mengirimkan halaman web yang aman dan terenkripsi adalah...",
+                options: ["HTTP", "HTTPS", "FTP", "SMTP"],
+                answer: 1,
+                discussion: "HTTPS (Hypertext Transfer Protocol Secure) menambahkan enkripsi SSL/TLS.",
+                weight: 1
+            },
+            {
+                id: 18,
+                type: "pg",
+                category: "Internet",
+                question: "Alamat unik berupa kombinasi angka yang dimiliki setiap perangkat yang terhubung ke jaringan internet disebut...",
+                options: ["MAC Address", "IP Address", "URL", "DNS"],
+                answer: 1,
+                discussion: "IP Address adalah identitas numeric unik unik di jaringan internet.",
+                weight: 1
+            },
+            {
+                id: 19,
+                type: "pg",
+                category: "Internet",
+                question: "Layanan internet yang menterjemahkan nama domain (misal: google.com) menjadi IP Address dinamakan...",
+                options: ["DHCP", "DNS (Domain Name System)", "VPN", "Gateway"],
+                answer: 1,
+                discussion: "DNS bertugas mengubah nama domain menjadi alamat IP komputer.",
+                weight: 1
+            },
+            {
+                id: 20,
+                type: "bs",
+                category: "Jaringan Komputer",
+                question: "Wi-Fi adalah teknologi jaringan nirkabel (tanpa kabel) yang menggunakan gelombang radio.",
+                options: ["Benar", "Salah"],
+                answer: 0,
+                discussion: "Benar, Wi-Fi mentransmisikan data menggunakan gelombang frekuensi radio.",
+                weight: 1
+            },
+
+            // KEAMANAN & ETIKA DIGITAL (21-24)
+            {
+                id: 21,
+                type: "pg",
+                category: "Keamanan Digital",
+                question: "Kejahatan siber yang bertujuan memancing korban untuk memberikan data sensitif seperti kata sandi lewat email palsu disebut...",
+                options: ["Phishing", "DDoS", "Ransomware", "Spyware"],
+                answer: 0,
+                discussion: "Phishing adalah upaya penipuan mengatasnamakan lembaga resmi.",
+                weight: 1
+            },
+            {
+                id: 22,
+                type: "pg",
+                category: "Keamanan Digital",
+                question: "Di bawah ini merupakan contoh kombinasi kata sandi (password) yang kuat dan aman, yaitu...",
+                options: ["12345678", "password", "P@ssw0rdInformatics2026!", "tanggal lahir"],
+                answer: 2,
+                discussion: "Password kuat menggunakan kombinasi huruf besar, kecil, angka, dan simbol unik.",
+                weight: 1
+            },
+            {
+                id: 23,
+                type: "pg",
+                category: "Etika Digital",
+                question: "Undang-Undang di Indonesia yang mengatur tentang informasi dan transaksi elektronik adalah...",
+                options: ["UU Hak Cipta", "UU ITE", "UU Pendidikan", "UU Ketenagakerjaan"],
+                answer: 1,
+                discussion: "UU ITE mengatur hukum dan regulasi lalu lintas transaksi elektronik.",
+                weight: 1
+            },
+            {
+                id: 24,
+                type: "pg_kompleks",
+                category: "Etika Digital",
+                question: "Sikap terpuji saat berinteraksi di media sosial antara lain (Pilih 2):",
+                options: ["Menyebarkan berita hoaks", "Menghormati pendapat orang lain", "Menggunakan bahasa yang sopan", "Melakukan cyberbullying"],
+                answer: [1, 2],
+                discussion: "Etika berinternet membutuhkan bahasa sopan dan toleransi tinggi.",
+                weight: 1
+            },
+
+            // SPREADSHEET & PENGOLAHAN DATA (25-28)
+            {
+                id: 25,
+                type: "pg",
+                category: "Spreadsheet",
+                question: "Fungsi dalam Microsoft Excel / Google Sheets yang digunakan untuk menjumlahkan sekumpulan angka adalah...",
+                options: ["AVERAGE", "SUM", "COUNT", "MAX"],
+                answer: 1,
+                discussion: "Rumus SUM digunakan untuk menjumlahkan total angka.",
+                weight: 1
+            },
+            {
+                id: 26,
+                type: "pg",
+                category: "Spreadsheet",
+                question: "Rumus `=AVERAGE(A1:A10)` berfungsi untuk...",
+                options: ["Mencari nilai tertinggi", "Mencari nilai terendah", "Mencari rata-rata nilai", "Menghitung jumlah sel"],
+                answer: 2,
+                discussion: "AVERAGE dipakai menghitung rata-rata aritmatika dari rentang sel.",
+                weight: 1
+            },
+            {
+                id: 27,
+                type: "isian",
+                category: "Spreadsheet",
+                question: "Fungsi logika pada Excel yang digunakan untuk menguji kondisi tertentu (jika benar/salah) adalah...",
+                answer: "if",
+                discussion: "Fungsi IF mengevaluasi ekspresi logika.",
+                weight: 1
+            },
+            {
+                id: 28,
+                type: "pg",
+                category: "Pengolahan Data",
+                question: "Pertemuan antara baris (Row) dan kolom (Column) dalam lembar kerja spreadsheet dinamakan...",
+                options: ["Cell (Sel)", "Range", "Sheet", "Grid"],
+                answer: 0,
+                discussion: "Cell adalah kotak perpotongan baris dan kolom.",
+                weight: 1
+            },
+
+            // PEMROGRAMAN DASAR (29-30)
+            {
+                id: 29,
+                type: "pg",
+                category: "Pemrograman Dasar",
+                question: "Tempat dalam memori komputer yang digunakan untuk menyimpan data yang nilainya dapat berubah-ubah dinamakan...",
+                options: ["Konstanta", "Variabel", "Tipe Data", "Operator"],
+                answer: 1,
+                discussion: "Variabel menyimpan nilai yang dapat dimodifikasi selama program berjalan.",
+                weight: 1
+            },
+            {
+                id: 30,
+                type: "uraian",
+                category: "Pemrograman Dasar",
+                question: "Jelaskan secara singkat perbedaan antara tipe data 'Integer' dan 'String' dalam pemrograman!",
+                answer: "integer angka bulat string teks",
+                discussion: "Integer menyimpan angka bulat (tanpa koma), sedangkan String menyimpan sekumpulan karakter/teks.",
+                weight: 1
+            }
+        ];
+
+        // ==========================================
+        // 3. STATE MANAJEMEN APLIKASI
+        // ==========================================
+        let studentData = null;
+        let userAnswers = {};
+        let flaggedQuestions = {};
+        let timeRemaining = EXAM_CONFIG.durationMinutes * 60; // detik
+        let timerInterval = null;
+        let currentQuestionIndex = 0;
+        let isExamSubmitted = false;
+        let warning10MinShown = false;
+        let warning5MinShown = false;
+
+        // LocalStorage Keys
+        const STORAGE_KEY_EXAM = "EXAM_INFORMATIKA_STATE";
+        const STORAGE_KEY_TEACHER_RECAP = "EXAM_INFORMATIKA_RESULTS";
+
+        // Initialize on load
+        window.onload = function() {
+            checkExistingState();
+        };
+
+        function saveExamState() {
+            if (isExamSubmitted || !studentData) return;
+            const state = {
+                studentData,
+                userAnswers,
+                flaggedQuestions,
+                timeRemaining,
+                currentQuestionIndex
+            };
+            localStorage.setItem(STORAGE_KEY_EXAM, JSON.stringify(state));
+        }
+
+        function checkExistingState() {
+            const savedState = localStorage.getItem(STORAGE_KEY_EXAM);
+            if (savedState) {
+                try {
+                    const parsed = JSON.parse(savedState);
+                    if (parsed.studentData && !parsed.isSubmitted) {
+                        studentData = parsed.studentData;
+                        userAnswers = parsed.userAnswers || {};
+                        flaggedQuestions = parsed.flaggedQuestions || {};
+                        timeRemaining = parsed.timeRemaining || (EXAM_CONFIG.durationMinutes * 60);
+                        currentQuestionIndex = parsed.currentQuestionIndex || 0;
+
+                        showExamView();
+                        startTimer();
+                        renderQuestion();
+                        renderGrid();
+                        return;
+                    }
+                } catch(e) {
+                    console.error("Gagal membaca state tersimpan:", e);
+                }
+            }
+        }
+
+        // ==========================================
+        // 4. LOGIKA PANDUAN TAMPILAN (VIEWS)
+        // ==========================================
+        function hideAllViews() {
+            document.getElementById('viewLogin').classList.add('hidden');
+            document.getElementById('viewExam').classList.add('hidden');
+            document.getElementById('viewResult').classList.add('hidden');
+            document.getElementById('viewTeacher').classList.add('hidden');
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const tokenInput = document.getElementById('loginToken').value.trim().toUpperCase();
+
+            if (tokenInput !== EXAM_CONFIG.examToken) {
+                showNoticeModal("Token Ujian Salah!", "Token yang Anda masukkan tidak valid. Silakan tanyakan token resmi kepada pengawas ujian.");
+                return;
+            }
+
+            studentData = {
+                name: document.getElementById('loginName').value.trim(),
+                nis: document.getElementById('loginNis').value.trim(),
+                className: document.getElementById('loginClass').value,
+                number: document.getElementById('loginNum').value.trim(),
+                startTime: new Date().toLocaleString('id-ID')
+            };
+
+            userAnswers = {};
+            flaggedQuestions = {};
+            timeRemaining = EXAM_CONFIG.durationMinutes * 60;
+
+            saveExamState();
+            showExamView();
+            startTimer();
+            renderQuestion();
+            renderGrid();
+        }
+
+        function showExamView() {
+            hideAllViews();
+            document.getElementById('viewExam').classList.remove('hidden');
+
+            document.getElementById('examStudentName').innerText = studentData.name;
+            document.getElementById('examStudentNis').innerText = studentData.nis;
+            document.getElementById('examStudentClass').innerText = studentData.className;
+            document.getElementById('examStudentNum').innerText = studentData.number;
+        }
+
+        // ==========================================
+        // 5. RENDERING SOAL & OPTION INTERAKSI
+        // ==========================================
+        function renderQuestion() {
+            const q = BANK_SOAL[currentQuestionIndex];
+            document.getElementById('qNumber').innerText = currentQuestionIndex + 1;
+            document.getElementById('qCategory').innerText = q.category;
+            
+            // Render Badge Type
+            const typeMap = {
+                'pg': 'Pilihan Ganda',
+                'pg_kompleks': 'Pilihan Ganda Kompleks',
+                'bs': 'Benar / Salah',
+                'isian': 'Isian Singkat',
+                'uraian': 'Uraian / Essay'
+            };
+            document.getElementById('qTypeBadge').innerText = typeMap[q.type] || 'Soal';
+
+            // Question Text
+            document.getElementById('qText').innerHTML = q.question;
+
+            // Render Options Box
+            const container = document.getElementById('qOptions');
+            container.innerHTML = "";
+
+            const currentAns = userAnswers[q.id];
+
+            if (q.type === 'pg' || q.type === 'bs') {
+                q.options.forEach((opt, idx) => {
+                    const isSelected = currentAns === idx;
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.onclick = () => selectSingleAnswer(q.id, idx);
+                    btn.className = `w-full text-left p-4 rounded-xl border font-medium text-xs sm:text-sm flex items-start space-x-3 transition ${
+                        isSelected 
+                        ? 'bg-brand-50 border-brand-500 text-brand-800 font-bold ring-2 ring-brand-500/20' 
+                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
+                    }`;
+
+                    const optChar = String.fromCharCode(65 + idx);
+                    btn.innerHTML = `
+                        <span class="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold ${
+                            isSelected ? 'bg-brand-600 text-white' : 'bg-slate-200 text-slate-600'
+                        }">${optChar}</span>
+                        <span class="flex-1 mt-0.5">${opt}</span>
+                    `;
+                    container.appendChild(btn);
+                });
+            } else if (q.type === 'pg_kompleks') {
+                const selectedArr = Array.isArray(currentAns) ? currentAns : [];
+                q.options.forEach((opt, idx) => {
+                    const isChecked = selectedArr.includes(idx);
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.onclick = () => toggleMultipleAnswer(q.id, idx);
+                    btn.className = `w-full text-left p-4 rounded-xl border font-medium text-xs sm:text-sm flex items-start space-x-3 transition ${
+                        isChecked 
+                        ? 'bg-brand-50 border-brand-500 text-brand-800 font-bold ring-2 ring-brand-500/20' 
+                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
+                    }`;
+
+                    btn.innerHTML = `
+                        <div class="w-5 h-5 rounded border flex items-center justify-center mt-0.5 ${
+                            isChecked ? 'bg-brand-600 border-brand-600 text-white' : 'border-slate-300 bg-white'
+                        }">
+                            ${isChecked ? '<i class="fa-solid fa-check text-xs"></i>' : ''}
+                        </div>
+                        <span class="flex-1">${opt}</span>
+                    `;
+                    container.appendChild(btn);
+                });
+            } else if (q.type === 'isian' || q.type === 'uraian') {
+                const val = currentAns || '';
+                const wrapper = document.createElement('div');
+                wrapper.className = "space-y-2";
+                
+                if (q.type === 'isian') {
+                    wrapper.innerHTML = `
+                        <input type="text" value="${val}" oninput="saveTextAnswer(${q.id}, this.value)" placeholder="Ketik jawaban singkat Anda..." class="w-full p-3.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">
+                    `;
+                } else {
+                    wrapper.innerHTML = `
+                        <textarea rows="4" oninput="saveTextAnswer(${q.id}, this.value)" placeholder="Tuliskan jawaban uraian lengkap Anda..." class="w-full p-3.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none">${val}</textarea>
+                    `;
+                }
+                container.appendChild(wrapper);
+            }
+
+            // Flag Toggle State
+            const isFlagged = !!flaggedQuestions[q.id];
+            const btnFlag = document.getElementById('btnFlag');
+            if (isFlagged) {
+                btnFlag.className = "px-4 py-2.5 bg-amber-400 text-slate-900 font-bold text-xs sm:text-sm rounded-xl transition flex items-center space-x-2";
+                document.getElementById('flagIcon').className = "fa-solid fa-bookmark";
+            } else {
+                btnFlag.className = "px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-semibold text-xs sm:text-sm rounded-xl transition flex items-center space-x-2";
+                document.getElementById('flagIcon').className = "fa-regular fa-bookmark";
+            }
+
+            // Prev/Next Button Enable Status
+            document.getElementById('btnPrev').disabled = currentQuestionIndex === 0;
+            document.getElementById('btnNext').disabled = currentQuestionIndex === BANK_SOAL.length - 1;
+
+            updateProgressBar();
+            renderGrid();
+            saveExamState();
+        }
+
+        function selectSingleAnswer(qId, idx) {
+            userAnswers[qId] = idx;
+            renderQuestion();
+        }
+
+        function toggleMultipleAnswer(qId, idx) {
+            let current = userAnswers[qId] || [];
+            if (!Array.isArray(current)) current = [];
+
+            if (current.includes(idx)) {
+                current = current.filter(i => i !== idx);
+            } else {
+                current.push(idx);
+            }
+            userAnswers[qId] = current;
+            renderQuestion();
+        }
+
+        function saveTextAnswer(qId, text) {
+            userAnswers[qId] = text;
+            updateProgressBar();
+            renderGrid();
+            saveExamState();
+        }
+
+        function toggleFlag() {
+            const qId = BANK_SOAL[currentQuestionIndex].id;
+            flaggedQuestions[qId] = !flaggedQuestions[qId];
+            renderQuestion();
+        }
+
+        function navigateQuestion(direction) {
+            const newIndex = currentQuestionIndex + direction;
+            if (newIndex >= 0 && newIndex < BANK_SOAL.length) {
+                currentQuestionIndex = newIndex;
+                renderQuestion();
+            }
+        }
+
+        function jumpToQuestion(index) {
+            currentQuestionIndex = index;
+            renderQuestion();
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('qGrid');
+            grid.innerHTML = "";
+
+            BANK_SOAL.forEach((q, idx) => {
+                const isCurrent = idx === currentQuestionIndex;
+                const isFlagged = !!flaggedQuestions[q.id];
+                const hasAnswer = userAnswers[q.id] !== undefined && userAnswers[q.id] !== "" && (!Array.isArray(userAnswers[q.id]) || userAnswers[q.id].length > 0);
+
+                let bgClass = "bg-slate-100 text-slate-700 hover:bg-slate-200";
+                if (isFlagged) {
+                    bgClass = "bg-amber-400 text-slate-900 font-bold";
+                } else if (hasAnswer) {
+                    bgClass = "bg-emerald-500 text-white font-bold";
+                }
+
+                const ringClass = isCurrent ? "ring-2 ring-brand-600 ring-offset-2 scale-105 z-10" : "";
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.onclick = () => jumpToQuestion(idx);
+                btn.className = `w-9 h-9 rounded-xl text-xs font-bold transition flex items-center justify-center ${bgClass} ${ringClass}`;
+                btn.innerText = idx + 1;
+
+                grid.appendChild(btn);
+            });
+        }
+
+        function updateProgressBar() {
+            const answeredCount = Object.keys(userAnswers).filter(k => {
+                const val = userAnswers[k];
+                if (Array.isArray(val)) return val.length > 0;
+                return val !== undefined && val !== "";
+            }).length;
+
+            const total = BANK_SOAL.length;
+            const pct = Math.round((answeredCount / total) * 100);
+
+            document.getElementById('progressText').innerText = `${answeredCount} / ${total}`;
+            document.getElementById('progressBar').style.width = `${pct}%`;
+        }
+
+        // ==========================================
+        // 6. TIMER UJIAN & NOTIFIKASI
+        // ==========================================
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+
+                // Warnings
+                if (timeRemaining === 600 && !warning10MinShown) {
+                    warning10MinShown = true;
+                    showNoticeModal("Peringatan Waktu!", "Sisa waktu pengerjaan ujian Anda tinggal 10 menit lagi.");
+                } else if (timeRemaining === 300 && !warning5MinShown) {
+                    warning5MinShown = true;
+                    showNoticeModal("Peringatan Waktu!", "Sisa waktu pengerjaan ujian Anda tinggal 5 menit lagi. Segera periksa jawaban!");
+                }
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    timeRemaining = 0;
+                    submitExam(); // Auto-submit first to prevent data loss
+                    showNoticeModal("Waktu Ujian Habis!", "Waktu pengerjaan telah selesai. Jawaban Anda telah otomatis dikumpulkan dan tersimpan di sistem.");
+                }
+
+                updateTimerDisplay();
+                if (timeRemaining % 10 === 0) saveExamState();
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const h = Math.floor(timeRemaining / 3600);
+            const m = Math.floor((timeRemaining % 3600) / 60);
+            const s = timeRemaining % 60;
+
+            const format = (n) => n < 10 ? '0' + n : n;
+            document.getElementById('timerText').innerText = `${format(h)}:${format(m)}:${format(s)}`;
+        }
+
+        // ==========================================
+        // 7. KALKULASI NILAI & SUBMISSION
+        // ==========================================
+        function confirmSubmitExam() {
+            showCustomModal({
+                title: "Kumpulkan Ujian Sekarang?",
+                message: "Apakah Anda yakin ingin mengakhiri dan mengumpulkan hasil ujian ini? Jawaban tidak dapat diubah setelah dikumpulkan.",
+                confirmText: "Ya, Kumpulkan",
+                cancelText: "Batal",
+                onConfirm: () => {
+                    submitExam();
+                }
+            });
+        }
+
+        function submitExam() {
+            if (timerInterval) clearInterval(timerInterval);
+            isExamSubmitted = true;
+
+            let correctCount = 0;
+            let wrongCount = 0;
+            let emptyCount = 0;
+
+            BANK_SOAL.forEach(q => {
+                const ans = userAnswers[q.id];
+                if (ans === undefined || ans === "" || (Array.isArray(ans) && ans.length === 0)) {
+                    emptyCount++;
+                } else if (q.type === 'pg' || q.type === 'bs') {
+                    if (ans === q.answer) correctCount++;
+                    else wrongCount++;
+                } else if (q.type === 'pg_kompleks') {
+                    const userArr = [...ans].sort();
+                    const correctArr = [...q.answer].sort();
+                    if (JSON.stringify(userArr) === JSON.stringify(correctArr)) correctCount++;
+                    else wrongCount++;
+                } else if (q.type === 'isian' || q.type === 'uraian') {
+                    // Simple string match check for auto grading
+                    const userClean = String(ans).trim().toLowerCase();
+                    const keyClean = String(q.answer).trim().toLowerCase();
+                    if (userClean.includes(keyClean) || keyClean.includes(userClean)) correctCount++;
+                    else wrongCount++;
+                }
+            });
+
+            const totalQ = BANK_SOAL.length;
+            const finalScore = Math.round((correctCount / totalQ) * 100);
+
+            let predicate = "Perlu Bimbingan";
+            let badgeClass = "bg-rose-600 text-white";
+
+            if (finalScore >= 90) {
+                predicate = "Sangat Baik";
+                badgeClass = "bg-emerald-600 text-white";
+            } else if (finalScore >= 80) {
+                predicate = "Baik";
+                badgeClass = "bg-blue-600 text-white";
+            } else if (finalScore >= 70) {
+                predicate = "Cukup";
+                badgeClass = "bg-amber-500 text-white";
+            }
+
+            // Populate Result UI
+            document.getElementById('resStudentName').innerText = studentData.name;
+            document.getElementById('resStudentNis').innerText = studentData.nis;
+            document.getElementById('resStudentClass').innerText = studentData.className;
+            document.getElementById('resStudentNum').innerText = studentData.number;
+            document.getElementById('resExamDate').innerText = new Date().toLocaleDateString('id-ID', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+            });
+
+            document.getElementById('resFinalScore').innerText = finalScore;
+            document.getElementById('resCorrect').innerText = correctCount;
+            document.getElementById('resWrong').innerText = wrongCount;
+            document.getElementById('resEmpty').innerText = emptyCount;
+
+            const badgeElem = document.getElementById('resPredicateBadge');
+            badgeElem.innerText = predicate;
+            badgeElem.className = `inline-block px-4 py-1.5 text-sm sm:text-base font-extrabold rounded-full ${badgeClass}`;
+
+            // Save Result to Teacher LocalStorage List
+            saveToTeacherStorage({
+                studentData,
+                score: finalScore,
+                correctCount,
+                wrongCount,
+                emptyCount,
+                predicate,
+                completedAt: new Date().toLocaleString('id-ID')
+            });
+
+            // Clear active exam state
+            localStorage.removeItem(STORAGE_KEY_EXAM);
+
+            // Show Result View
+            hideAllViews();
+            document.getElementById('viewResult').classList.remove('hidden');
+        }
+
+        // ==========================================
+        // 8. PENGIRIMAN HASIL VIA EMAIL
+        // ==========================================
+        function sendEmailResult() {
+            const teacherEmail = EMAIL_CONFIG.teacherEmail || "slametpriadi10@gmail.com";
+            const studentName = document.getElementById('resStudentName').innerText;
+            const studentNis = document.getElementById('resStudentNis').innerText;
+            const studentClass = document.getElementById('resStudentClass').innerText;
+            const score = document.getElementById('resFinalScore').innerText;
+            const predicate = document.getElementById('resPredicateBadge').innerText;
+            const examDate = document.getElementById('resExamDate').innerText;
+
+            // Jika EmailJS diisi kunci publik asli
+            if (EMAIL_CONFIG.enabled && EMAIL_CONFIG.serviceID !== "YOUR_SERVICE_ID" && EMAIL_CONFIG.publicKey !== "YOUR_PUBLIC_KEY") {
+                const btn = document.getElementById('btnSendEmail');
+                btn.disabled = true;
+                btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Mengirim...`;
+
+                emailjs.init(EMAIL_CONFIG.publicKey);
+
+                const templateParams = {
+                    teacher_email: teacherEmail,
+                    student_name: studentName,
+                    student_nis: studentNis,
+                    class_name: studentClass,
+                    score: score,
+                    predicate: predicate,
+                    exam_date: examDate
+                };
+
+                emailjs.send(EMAIL_CONFIG.serviceID, EMAIL_CONFIG.templateID, templateParams)
+                    .then(function() {
+                        showNoticeModal("Email Terkirim", `Hasil ujian telah berhasil dikirimkan ke email guru (<b>${teacherEmail}</b>).`);
+                        btn.disabled = false;
+                        btn.innerHTML = `<i class="fa-solid fa-check"></i> Terkirim`;
+                    }, function(error) {
+                        showNoticeModal("Gagal Mengirim via EmailJS", "Membuka aplikasi email Anda untuk mengirim laporan langsung ke " + teacherEmail);
+                        openMailClient(teacherEmail, studentName, studentNis, studentClass, score, predicate, examDate);
+                        btn.disabled = false;
+                        btn.innerHTML = `<i class="fa-solid fa-envelope"></i> Kirim ke Email Guru`;
+                    });
+            } else {
+                // Fallback langsung ke aplikasi email
+                openMailClient(teacherEmail, studentName, studentNis, studentClass, score, predicate, examDate);
+            }
+        }
+
+        function openMailClient(teacherEmail, studentName, studentNis, studentClass, score, predicate, examDate) {
+            const subject = encodeURIComponent(`[Hasil Ujian Informatika] ${studentName} - Kelas ${studentClass}`);
+            const body = encodeURIComponent(
+                `Yth. Bapak/Ibu Guru Informatika,\n\nBerikut rekapitulasi hasil Ujian Informatika SMP:\n\n` +
+                `Nama Siswa   : ${studentName}\n` +
+                `NIS / NISN   : ${studentNis}\n` +
+                `Kelas        : ${studentClass}\n` +
+                `Nilai Akhir  : ${score}\n` +
+                `Predikat     : ${predicate}\n` +
+                `Tanggal Ujian: ${examDate}\n\n` +
+                `Terima kasih.`
+            );
+
+            window.location.href = `mailto:${teacherEmail}?subject=${subject}&body=${body}`;
+
+            showNoticeModal("Laporan Email Siap", `Draf laporan hasil ujian atas nama <b>${studentName}</b> telah disiapkan untuk dikirim ke <b>${teacherEmail}</b>. Silakan selesaikan pengiriman pada aplikasi email yang terbuka.`);
+        }
+
+        // ==========================================
+        // 9. DASHBOARD GURU & STORAGE MANAGEMENT
+        // ==========================================
+        function saveToTeacherStorage(record) {
+            // 1. Simpan ke Local Storage
+            let list = [];
+            try {
+                const existing = localStorage.getItem(STORAGE_KEY_TEACHER_RECAP);
+                if (existing) list = JSON.parse(existing);
+            } catch(e) {}
+
+            list.unshift(record);
+            localStorage.setItem(STORAGE_KEY_TEACHER_RECAP, JSON.stringify(list));
+
+            // 2. Kirim ke Realtime Cloud Database jika terhubung
+            if (typeof window.cloudSaveResult === 'function') {
+                window.cloudSaveResult(record);
+            }
+
+            renderTeacherTable();
+        }
+
+        function switchTeacherView() {
+            hideAllViews();
+            document.getElementById('viewTeacher').classList.remove('hidden');
+            renderTeacherTable();
+        }
+
+        function switchStudentView() {
+            if (studentData && !isExamSubmitted) {
+                showExamView();
+            } else if (isExamSubmitted) {
+                hideAllViews();
+                document.getElementById('viewResult').classList.remove('hidden');
+            } else {
+                hideAllViews();
+                document.getElementById('viewLogin').classList.remove('hidden');
+            }
+        }
+
+        function renderTeacherTable() {
+            let localList = [];
+            try {
+                const existing = localStorage.getItem(STORAGE_KEY_TEACHER_RECAP);
+                if (existing) localList = JSON.parse(existing);
+            } catch(e) {}
+
+            // Combined list from Cloud and LocalStorage
+            const cloudList = window.cloudResultsList || [];
+            
+            // Map for deduplication based on student identity and submission timestamp
+            const combinedMap = new Map();
+
+            cloudList.forEach(item => {
+                const key = `${item.studentData?.nis}_${item.studentData?.name}_${item.score}_${item.completedAt}`;
+                combinedMap.set(key, item);
+            });
+
+            localList.forEach(item => {
+                const key = `${item.studentData?.nis}_${item.studentData?.name}_${item.score}_${item.completedAt}`;
+                if (!combinedMap.has(key)) {
+                    combinedMap.set(key, item);
+                }
+            });
+
+            let combinedList = Array.from(combinedMap.values());
+
+            const searchInput = document.getElementById('teacherSearch');
+            const search = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const filterClass = document.getElementById('teacherFilterClass') ? document.getElementById('teacherFilterClass').value : '';
+            const sortBy = document.getElementById('teacherSort') ? document.getElementById('teacherSort').value : 'newest';
+
+            // Safe Filter Logic
+            let filtered = combinedList.filter(item => {
+                if (!item || !item.studentData) return false;
+                const name = (item.studentData.name || '').toLowerCase();
+                const nis = (item.studentData.nis || '').toLowerCase();
+                const className = item.studentData.className || '';
+
+                const matchName = name.includes(search);
+                const matchNis = nis.includes(search);
+                const matchClass = filterClass === "" || className === filterClass;
+                return (matchName || matchNis) && matchClass;
+            });
+
+            // Safe Sort Logic
+            if (sortBy === 'highest') {
+                filtered.sort((a, b) => (b.score || 0) - (a.score || 0));
+            } else if (sortBy === 'lowest') {
+                filtered.sort((a, b) => (a.score || 0) - (b.score || 0));
+            } else {
+                // Newest sorting default
+                filtered.sort((a, b) => (b.cloudTimestamp || 0) - (a.cloudTimestamp || 0));
+            }
+
+            const tbody = document.getElementById('teacherTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = "";
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-center py-8 text-slate-400">
+                            <i class="fa-solid fa-folder-open text-3xl mb-2 text-slate-300 block"></i>
+                            Belum ada data rekapitulasi ujian siswa yang sesuai.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            filtered.forEach((item, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+                tr.innerHTML = `
+                    <td class="p-3.5 font-bold text-slate-400">${idx + 1}</td>
+                    <td class="p-3.5 font-bold text-slate-800">${item.studentData?.name || '-'}</td>
+                    <td class="p-3.5 text-slate-600 font-mono">${item.studentData?.nis || '-'}</td>
+                    <td class="p-3.5 font-semibold text-brand-600">${item.studentData?.className || '-'}</td>
+                    <td class="p-3.5 text-center font-black text-slate-800 text-base">${item.score ?? 0}</td>
+                    <td class="p-3.5 text-center">
+                        <span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                            (item.score ?? 0) >= 80 ? 'bg-emerald-100 text-emerald-800' : 
+                            (item.score ?? 0) >= 70 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                        }">
+                            ${item.predicate || 'Perlu Bimbingan'}
+                        </span>
+                    </td>
+                    <td class="p-3.5 text-center text-slate-500 text-xs">${item.completedAt || '-'}</td>
+                    <td class="p-3.5 text-center">
+                        <button onclick="deleteRecord(${idx})" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition" title="Hapus Data">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function deleteRecord(index) {
+            showCustomModal({
+                title: "Hapus Rekap Siswa",
+                message: "Apakah Anda yakin ingin menghapus data rekapitulasi nilai ini dari penyimpanan lokal?",
+                confirmText: "Hapus Data",
+                cancelText: "Batal",
+                onConfirm: () => {
+                    let list = JSON.parse(localStorage.getItem(STORAGE_KEY_TEACHER_RECAP) || "[]");
+                    list.splice(index, 1);
+                    localStorage.setItem(STORAGE_KEY_TEACHER_RECAP, JSON.stringify(list));
+                    renderTeacherTable();
+                }
+            });
+        }
+
+        function exportToCSV() {
+            let list = [];
+            try {
+                const existing = localStorage.getItem(STORAGE_KEY_TEACHER_RECAP);
+                if (existing) list = JSON.parse(existing);
+            } catch(e) {}
+
+            // Merge with cloud results for full CSV report
+            const cloudList = window.cloudResultsList || [];
+            const combinedMap = new Map();
+            cloudList.forEach(item => combinedMap.set(`${item.studentData?.nis}_${item.studentData?.name}`, item));
+            list.forEach(item => {
+                const key = `${item.studentData?.nis}_${item.studentData?.name}`;
+                if (!combinedMap.has(key)) combinedMap.set(key, item);
+            });
+
+            const exportList = Array.from(combinedMap.values());
+
+            if (exportList.length === 0) {
+                showNoticeModal("Ekspor Gagal", "Belum ada data siswa untuk diekspor ke CSV.");
+                return;
+            }
+
+            let csv = "No,Nama Siswa,NIS,Kelas,Nomor Peserta,Nilai,Predikat,Waktu Selesai\n";
+            exportList.forEach((item, i) => {
+                csv += `"${i+1}","${item.studentData?.name || ''}","${item.studentData?.nis || ''}","${item.studentData?.className || ''}","${item.studentData?.number || ''}","${item.score ?? 0}","${item.predicate || ''}","${item.completedAt || ''}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Rekap_Ujian_Informatika_${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+        }
+
+        function toggleConfigPanel() {
+            const panel = document.getElementById('configPanelContent');
+            const chevron = document.getElementById('configChevron');
+            panel.classList.toggle('hidden');
+            chevron.classList.toggle('rotate-180');
+        }
+
+        // ==========================================
+        // 10. MODAL HELPER FUNCTIONS
+        // ==========================================
+        function showCustomModal({ title, message, confirmText, cancelText, onConfirm }) {
+            const modal = document.getElementById('modalConfirm');
+            document.getElementById('modalTitle').innerText = title || "Konfirmasi";
+            document.getElementById('modalMessage').innerText = message || "";
+            
+            const btnConfirm = document.getElementById('modalBtnConfirm');
+            const btnCancel = document.getElementById('modalBtnCancel');
+
+            btnConfirm.innerText = confirmText || "Ya";
+            btnCancel.innerText = cancelText || "Batal";
+
+            modal.classList.remove('hidden');
+
+            btnConfirm.onclick = () => {
+                modal.classList.add('hidden');
+                if (onConfirm) onConfirm();
+            };
+
+            btnCancel.onclick = () => {
+                modal.classList.add('hidden');
+            };
+        }
+
+        function showNoticeModal(title, message, onClose) {
+            const modal = document.getElementById('modalNotice');
+            document.getElementById('noticeTitle').innerText = title || "Pemberitahuan";
+            document.getElementById('noticeMessage').innerHTML = message || "";
+            modal.classList.remove('hidden');
+
+            window.closeNoticeModal = function() {
+                modal.classList.add('hidden');
+                if (onClose) onClose();
+            };
+        }
+
+        function restartToHome() {
+            studentData = null;
+            userAnswers = {};
+            flaggedQuestions = {};
+            isExamSubmitted = false;
+            hideAllViews();
+            document.getElementById('viewLogin').classList.remove('hidden');
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log("Fullscreen error: ", err);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
